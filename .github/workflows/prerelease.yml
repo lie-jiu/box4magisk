@@ -12,14 +12,16 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
 
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v5
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v5
         with:
-          node-version: 20
+          node-version: 22
           cache: npm
           cache-dependency-path: webui/package-lock.json
 
@@ -33,24 +35,29 @@ jobs:
         run: sh build.sh
 
       - name: Delete current prerelease assets
-        uses: andreaswilli/delete-release-assets-action@v3.0.0
-        with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          tag: Prerelease
-          deleteOnlyFromDrafts: false
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          if ! gh release view Prerelease >/dev/null 2>&1; then
+            echo "Prerelease does not exist yet, nothing to delete."
+            exit 0
+          fi
+          gh release view Prerelease --json assets --jq '.assets[].name' | while read -r asset; do
+            echo "Deleting asset: $asset"
+            gh release delete-asset Prerelease "$asset" --yes < /dev/null
+          done
 
       - name: Tag Repo
-        uses: richardsimko/update-tag@v1
+        uses: richardsimko/update-tag@v3
         with:
           tag_name: Prerelease
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Upload Prerelease
-        uses: softprops/action-gh-release@v1
+        uses: softprops/action-gh-release@v3
         if: ${{ success() }}
         with:
-          tag: Prerelease
           tag_name: Prerelease
           files: box4_v*.zip
           prerelease: true
